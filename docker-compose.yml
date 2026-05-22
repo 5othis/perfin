@@ -1,0 +1,20 @@
+services:
+  api:
+    build: ./api
+    environment:
+      DB_PATH: /app/data/perfin.db
+      PORT: 3001
+    volumes:
+      - db_data:/app/data
+    restart: unless-stopped
+
+  app:
+    build: ./app
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  db_data:
