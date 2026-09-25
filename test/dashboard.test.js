@@ -42,7 +42,7 @@ const settle = () => new Promise(resolve => setImmediate(resolve))
 let instance = 0
 
 async function dashboard(t, { desktop = true } = {}) {
-  const original = new Map(['document', 'fetch', 'ResizeObserver', 'matchMedia'].map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]))
+  const original = new Map(['document', 'fetch', 'ResizeObserver', 'matchMedia', 'DOMPoint'].map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]))
   t.after(() => {
     for (const [key, descriptor] of original) {
       if (descriptor) Object.defineProperty(globalThis, key, descriptor)
@@ -59,6 +59,11 @@ async function dashboard(t, { desktop = true } = {}) {
   get('chart-fund-selector').open = true
   get('history-chart').clientWidth = 266
   get('history-chart').clientHeight = 340
+  get('history-chart').getScreenCTM = () => ({ inverse() {} })
+  globalThis.DOMPoint = class {
+    constructor(x, y) { this.x = x; this.y = y }
+    matrixTransform() { return this }
+  }
   const metricButtons = ['portfolio', 'invested'].map(metric => Object.assign(new Element('button'), { dataset: { metric } }))
   const periodButtons = ['1M', '3M', '1Y', 'ALL'].map(period => Object.assign(new Element('button'), { dataset: { period } }))
   globalThis.document = {
@@ -293,4 +298,118 @@ test('a failed refresh retains the snapshot and explicitly warns that it may be 
   assert.equal(get('request-error').hidden, false)
   assert.match(get('request-error').textContent, /previous snapshot.*may be outdated/)
   assert.equal(get('refresh').disabled, false)
+})
+
+test('chart readout follows the exact tooltip observation for pointer, touch, and keyboard', async t => {
+  const { get, respond, metricButtons, periodButtons } = await dashboard(t)
+  const data = holdings()
+  data.history.points = [
+    { date: '2020-01-02', valueCents: 1000 },
+    { date: '2026-09-01', valueCents: 0 },
+    { date: '2026-09-24', valueCents: 12345 },
+  ]
+  const csv = ledger()
+  csv.points = [
+    { date: '2025-01-02', valueCents: -200 },
+    { date: '2025-02-28', valueCents: 300 },
+  ]
+  await respond('/api/portfolio', data)
+  await respond('/api/transactions', csv)
+  const svg = get('history-chart')
+  const readout = (amount, date) => {
+    assert.equal(get('chart-current-value').textContent, amount)
+    assert.equal(get('chart-current-date').textContent, `Observation · ${date}`)
+  }
+  const matchesTooltip = () => {
+    const tooltip = svg.children.find(child => child.attributes.get('class') === 'chart-tooltip')
+    readout(tooltip.children[2].textContent, tooltip.children[1].textContent)
+  }
+  const key = key => svg.listeners.get('keydown')({ key, preventDefault() {} })
+  readout('123,45 €', '24.09.2026')
+  assert.equal(get('chart-current-label').textContent, 'Selected holdings value at observation date')
+  svg.listeners.get('pointermove')({ clientX: 84, clientY: 100 })
+  readout('10,00 €', '02.01.2020')
+  matchesTooltip()
+  assert.equal(get('chart-announcement').textContent, '', 'Pointer does not add live announcements')
+  svg.listeners.get('pointerleave')()
+  readout('10,00 €', '02.01.2020')
+  svg.listeners.get('pointerdown')({ clientX: 254, clientY: 100, pointerType: 'touch' })
+  readout('123,45 €', '24.09.2026')
+  matchesTooltip()
+  key('ArrowLeft')
+  readout('0,00 €', '01.09.2026')
+  matchesTooltip()
+  key('Home')
+  matchesTooltip()
+  key('Escape')
+  readout('10,00 €', '02.01.2020')
+  periodButtons[0].listeners.get('click')()
+  readout('123,45 €', '24.09.2026')
+  key('Home')
+  readout('0,00 €', '01.09.2026')
+  periodButtons[3].listeners.get('click')()
+  readout('123,45 €', '24.09.2026')
+  metricButtons[1].listeners.get('click')()
+  readout('3,00 €', '28.02.2025')
+  assert.equal(get('chart-current-label').textContent, 'Recorded net invested · selected funds')
+  // A step chart uses the preceding observation even when the next is nearer.
+  svg.listeners.get('pointermove')({ clientX: 230, clientY: 100 })
+  readout('-2,00 €', '02.01.2025')
+  matchesTooltip()
+  key('End')
+  readout('3,00 €', '28.02.2025')
+  matchesTooltip()
+  key('Home')
+  get('refresh').listeners.get('click')()
+  await respond('/api/portfolio?refresh=1', data)
+  await respond('/api/transactions', csv)
+  readout('3,00 €', '28.02.2025')
+  metricButtons[0].listeners.get('click')()
+  readout('123,45 €', '24.09.2026')
+})
+
+test('chart readout sums selected funds and clears stale values for empty selections and data', async t => {
+  const { get, respond, metricButtons } = await dashboard(t)
+  const data = holdings()
+  data.funds[0].valueHistory = [
+    { date: '2026-09-01', valueCents: 100 },
+    { date: '2026-09-24', valueCents: 200 },
+  ]
+  data.funds[1].valueHistory = [
+    { date: '2026-09-01', valueCents: 300 },
+    { date: '2026-09-24', valueCents: 500 },
+  ]
+  data.history.points = [{ date: '2026-09-24', valueCents: 700 }]
+  const csv = ledger()
+  csv.points = [{ date: '2025-01-02', valueCents: 300 }]
+  await respond('/api/portfolio', data)
+  await respond('/api/transactions', csv)
+  const empty = () => {
+    assert.equal(get('chart-current-value').textContent, '—')
+    assert.equal(get('chart-current-date').textContent, 'No observation')
+  }
+  get('chart-all-funds').checked = false
+  get('chart-all-funds').listeners.get('change')()
+  empty()
+  const boxes = get('chart-funds').querySelectorAll('input')
+  const pick = index => {
+    boxes[index].checked = true
+    get('chart-funds').listeners.get('change')({ target: boxes[index] })
+  }
+  pick(0)
+  assert.equal(get('chart-current-value').textContent, '2,00 €')
+  get('history-chart').listeners.get('keydown')({ key: 'Home', preventDefault() {} })
+  assert.equal(get('chart-current-value').textContent, '1,00 €')
+  pick(1)
+  assert.equal(get('chart-current-value').textContent, '7,00 €')
+  assert.equal(get('chart-current-date').textContent, 'Observation · 24.09.2026')
+  metricButtons[1].listeners.get('click')()
+  assert.equal(get('chart-current-value').textContent, '2,00 €')
+  assert.equal(get('chart-current-date').textContent, 'Observation · 02.01.2025')
+  get('refresh').listeners.get('click')()
+  await respond('/api/portfolio?refresh=1', holdings())
+  await respond('/api/transactions', { status: 'missing', message: 'CSV not found.' })
+  empty()
+  metricButtons[0].listeners.get('click')()
+  empty()
 })

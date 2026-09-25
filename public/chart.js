@@ -151,10 +151,16 @@ export function createHistoryChart() {
     for (const element of [cursor, dot, tooltip]) element?.setAttribute('visibility', 'hidden')
   }
 
+  function updateReadout(point) {
+    byId('chart-current-value').textContent = point ? euro(point.valueCents) : '—'
+    byId('chart-current-date').textContent = point ? `Observation · ${displayDate(point.date)}` : 'No observation'
+  }
+
   function inspect(index, pointer, announce = false) {
     const point = visible[index]
     if (!point) return
     selectedIndex = index
+    updateReadout(point)
     const label = `${displayDate(point.date)} · ${euro(point.valueCents)}`
     if (announce) byId('chart-announcement').textContent = label
     const { x, y } = positions[index]
@@ -204,6 +210,10 @@ export function createHistoryChart() {
     const invested = metric === 'invested'
     const selection = selectedChartData(history, funds, transactions, selectedIsins === null ? 'ALL' : [...selectedIsins], metric)
     visible = periodPoints(selection.points, period)
+    byId('chart-current-label').textContent = invested
+      ? 'Recorded net invested · selected funds'
+      : 'Selected holdings value at observation date'
+    updateReadout(visible.at(-1))
     positions = []
     byId('chart-announcement').textContent = ''
     byId('chart-title').textContent = selection.title
