@@ -41,14 +41,11 @@
           <button type="button" data-metric="portfolio" aria-pressed="false">Portfolio value</button>
         </div>
       </div>
-      <fieldset class="fund-picker">
-        <legend>Funds to include</legend>
-        <label class="fund-option fund-option-all"><input id="chart-all-funds" type="checkbox" checked> All funds</label>
-        <div id="chart-funds" class="fund-options"></div>
-      </fieldset>
       <p class="muted chart-description" id="chart-description">Historical EOD prices &times; current units, not actual past holdings or investment returns.
         Only dates with prices for all included funds are plotted; missing dates are not estimated.</p>
       <p id="chart-coverage" class="muted"></p>
+      <div class="chart-layout">
+      <div class="chart-main">
       <p id="chart-empty" class="empty-state" role="status">Loading history...</p>
       <div id="chart-content" hidden>
         <svg id="history-chart" viewBox="0 0 960 290" role="group" tabindex="0" aria-roledescription="interactive chart" aria-labelledby="chart-title" aria-describedby="chart-description chart-summary chart-help"></svg>
@@ -65,6 +62,13 @@
             </table>
           </div>
         </details>
+      </div>
+      </div>
+      <fieldset class="fund-picker">
+        <legend>Funds</legend>
+        <label class="fund-option fund-option-all"><input id="chart-all-funds" type="checkbox" checked> <span>All funds</span></label>
+        <div id="chart-funds" class="fund-options"></div>
+      </fieldset>
       </div>
     </section>
 

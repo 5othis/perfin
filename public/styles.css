@@ -26,14 +26,17 @@ button:focus-visible, input:focus-visible, summary:focus-visible, #history-chart
 .fetch-info { text-align: right; font-size: 12px; }
 .panel { border: 1px solid #dfe3e9; background: white; border-radius: 6px; padding: 18px; }
 .chart-panel { margin-bottom: 24px; }
-.fund-picker { min-width: 0; margin: 14px 0 0; padding: 0; border: 0; font-size: 12px; }
-.fund-picker legend { color: #656c78; margin-bottom: 8px; }
-.fund-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.fund-option { display: flex; align-items: center; gap: 9px; border: 1px solid #dfe3e9; border-radius: 5px; padding: 9px 10px; cursor: pointer; overflow-wrap: anywhere; }
-.fund-option:has(input:checked) { color: #1d4ed8; background: #eff4ff; border-color: #d3e0fc; }
-.fund-option input { flex-shrink: 0; accent-color: #2563eb; margin: 0; width: 16px; height: 16px; cursor: pointer; }
-.fund-option-all { width: fit-content; margin-bottom: 8px; }
-.fund-option small { display: block; color: #656c78; margin-top: 3px; }
+.chart-layout { display: grid; grid-template-columns: minmax(0, 1fr) 230px; gap: 18px; align-items: start; }
+.chart-main { min-width: 0; }
+.fund-picker { min-width: 0; margin: 0; padding: 0 0 0 16px; border: 0; border-left: 1px solid #e7eaf0; font-size: 12px; }
+.fund-picker legend { float: left; width: 100%; color: #656c78; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+.fund-options { display: grid; gap: 2px; }
+.fund-option { clear: both; display: flex; align-items: flex-start; gap: 8px; border-radius: 4px; padding: 6px; cursor: pointer; line-height: 1.35; overflow-wrap: anywhere; }
+.fund-option:hover { background: #f5f7fa; }
+.fund-option input { flex-shrink: 0; accent-color: #2563eb; margin: 1px 0 0; width: 14px; height: 14px; cursor: pointer; }
+.fund-option input:not(:checked) + span { color: #8a919c; }
+.fund-option-all { font-weight: 600; border-bottom: 1px solid #e7eaf0; border-radius: 4px 4px 0 0; margin-bottom: 4px; padding-bottom: 8px; }
+.fund-option small { display: block; color: #8a919c; font-family: ui-monospace, Consolas, monospace; font-size: 10.5px; margin-top: 1px; }
 .periods, .chart-metrics { display: flex; gap: 3px; }
 .chart-metrics { margin-top: 14px; }
 .chart-metrics button { font-size: 12px; padding: 6px 10px; }
@@ -89,7 +92,9 @@ footer details { margin-top: 6px; font-size: 11px; }
 .error-banner { border: 1px solid #ecc7bb; background: #fff3ef; color: #8c3421; padding: 12px; border-radius: 5px; margin-bottom: 18px; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 @media (max-width: 760px) {
-  .fund-options { grid-template-columns: 1fr; }
+  .chart-layout { grid-template-columns: 1fr; }
+  .fund-picker { padding: 12px 0 0; border-left: 0; border-top: 1px solid #e7eaf0; }
+  .fund-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .fund-grid { grid-template-columns: 1fr; }
   .fund-name { min-height: 0; }
   #history-chart { min-height: 180px; }
@@ -102,4 +107,5 @@ footer details { margin-top: 6px; font-size: 11px; }
   .fetch-info p + p { margin-left: 5px; }
   .section-heading { align-items: flex-start; flex-direction: column; gap: 9px; }
   .panel { padding: 14px; }
+  .fund-options { grid-template-columns: 1fr; }
 }
