@@ -126,15 +126,21 @@ fetchedAt: the time that fund's successful price request completed.
 attemptedAt: when that fund's most recent uncached update was attempted.
 servedAt: when the local API assembled the response; not a fresh provider fetch.
 Cached prices retain their original fetchedAt timestamp.
-The summary shows the most recent successful price fetch among displayed funds.
-Browser timestamps use your local timezone. Valuation dates remain date-only.
+The header shows the most recent successful price fetch among displayed funds.
+The overview shows the latest available price date; individual holding dates can differ.
+Numbers and dates use German/European formatting. Fetch timestamps use your local
+timezone; valuation dates remain date-only.
 
 Value = units x unadjusted closing price, using decimal integer arithmetic.
 Round each holding half-up to EUR cents, then sum those displayed holding values.
 Price per unit displays up to 12 decimals; calculations use the returned numeric
 price, not its display rounding. Totals exclude unavailable funds and are labeled
-"Partial total" whenever any fund is unavailable. If none are priced, EUR 0.00
-is explicitly identified as an empty partial sum, not the portfolio's value.
+"Partial total" whenever any fund is unavailable. If none are priced, the dashboard
+shows a dash rather than presenting the empty sum as the portfolio's value.
+Allocation is each available holding's value divided by a positive displayed total.
+Partial coverage is explicitly labeled as a share of the priced subtotal, not the
+whole portfolio. Unavailable holdings and zero totals have no allocation percentage.
+Allocation is not investment performance.
 
 EODHD documentation:
 https://eodhd.com/financial-apis/search-api-for-stocks-etfs-mutual-funds
@@ -150,7 +156,9 @@ Raw EOD closes are used, not dividend/split-adjusted prices.
 The existing EOD requests also supply the history: no extra API calls are made.
 History is cached with each fund's current price. Only currently available funds
 are included, and that same group is used throughout the series.
-If any fund is unavailable, the chart is explicitly labeled partial.
+The valuation mode is titled "Historical value of current holdings" for every
+selection. Partial coverage and selected funds are disclosed separately below the
+filter chips, without changing the meaning of the title.
 Only exact shared price dates with valid positive prices are calculated.
 Missing or unrepresentable historical prices are omitted, never zero-filled or
 carried forward. Lines connect the available observations; inspect their exact
@@ -177,22 +185,26 @@ can be legitimate separate transactions.
 
 The Investment history section shows all CSV records, newest first, and cash
 totals per fund. Net invested is purchases minus sales (not profit or cost basis).
-The Invested amount chart groups records by date, sums exact integer cents, and
-draws a cumulative step line. It defaults to All so the full file is visible.
+The "Net invested cash (CSV)" chart groups records by date, sums exact integer
+cents, and draws a cumulative step line. It remains the default chart mode, with
+the All range selected so the full file is visible.
 The date range ends at the last recorded transaction. Nothing later is inferred.
 
 The CSV does not contain purchased units or execution prices, so no historical
 units or past portfolio valuations are inferred from it. Current holdings remain
-configured in holdings.js. The Portfolio value chart remains a separate,
+configured in holdings.js. The current-holdings valuation chart remains a separate,
 clearly labeled current-units reconstruction based on available EODHD prices.
 Move the pointer or touch either chart for its date/value bubble. Keyboard users
 can focus the chart and use Left/Right, Home/End and Escape. The data table remains
 available as a non-graphical alternative; there is no bottom slider.
+The Investment history section reports CSV coverage against the current holdings
+by ISIN after both independent API responses arrive. Missing records mean unknown
+invested amounts, not zero. Portfolio value minus CSV net invested is not profit.
 
 CHART FUND PICKER
 
 Use the visible fund checkboxes to include any combination of funds, for either
-Invested amount or Portfolio value. All funds selects or clears every checkbox.
+Net invested cash or Current holdings value. All funds selects or clears every checkbox.
 The chart updates immediately on every change, without refetching prices.
 Multiple selected funds are summed into one combined line; no selection shows a
 prompt rather than a zero balance. The selection only affects the chart and its data table, not headline
@@ -204,3 +216,6 @@ from that ISIN's CSV records; missing records show an empty state, not zero.
 Unavailable selected prices produce a partial chart. Missing CSV records are
 explicitly identified as unknown investments, not zero.
 Selected funds, chart mode, and period are retained during Refresh.
+The full-width chart sits above compact holding rows (cards on mobile). Each
+holding shows price availability or cache status; source details remain expandable.
+Wide tables scroll within their own regions and can be focused from the keyboard.

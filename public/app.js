@@ -5,10 +5,12 @@ const unitPrice = new Intl.NumberFormat('de-DE', {
   style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 12,
 })
 const units = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 9 })
-const timestamp = new Intl.DateTimeFormat(undefined, {
+const percentage = new Intl.NumberFormat('de-DE', { style: 'percent', maximumFractionDigits: 1 })
+const timestamp = new Intl.DateTimeFormat('de-DE', {
   dateStyle: 'medium', timeStyle: 'medium',
 })
-const date = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeZone: 'UTC' })
+const date = new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeZone: 'UTC' })
+const showDate = value => date.format(new Date(`${value}T00:00:00Z`))
 const byId = id => document.getElementById(id)
 let loading = false
 let hasData = false
@@ -18,6 +20,28 @@ let transactions = null
 
 function updateChart() {
   renderHistory(portfolio?.history, portfolio?.funds ?? [], transactions)
+  updateCsvCoverage()
+}
+
+function updateCsvCoverage() {
+  const scope = byId('transactions-scope')
+  if (transactions?.status !== 'available') {
+    scope.textContent = transactions
+      ? 'CSV coverage unavailable. Net invested cannot be established.'
+      : 'Checking CSV coverage of current holdings…'
+    return
+  }
+  if (!portfolio) {
+    scope.textContent = `CSV contains ${transactions.byFund.length} funds. Current holdings coverage is not yet available.`
+    return
+  }
+  const recorded = new Set(transactions.byFund.map(fund => fund.isin))
+  const covered = portfolio.funds.filter(fund => recorded.has(fund.isin)).length
+  scope.textContent = `Net invested CSV coverage: ${covered} of ${portfolio.funds.length} current funds. ${
+    covered < portfolio.funds.length
+      ? 'Holdings without CSV records have unknown invested amounts, not zero.'
+      : 'Recorded cash flows only; not a complete cost basis or investment return.'
+  }`
 }
 
 function showTimestamp(value) {
@@ -26,7 +50,7 @@ function showTimestamp(value) {
 
 function render(data) {
   byId('total-label').textContent = data.totalLabel
-  byId('total').textContent = money.format(data.totalCents / 100)
+  byId('total').textContent = data.availableCount > 0 ? money.format(data.totalCents / 100) : '—'
   byId('coverage').textContent = data.availableCount === 0
     ? `0 of ${data.funds.length} funds priced. No holdings are included; this is not a zero-value portfolio.`
     : `${data.availableCount} of ${data.funds.length} funds included${data.partial ? '. Unavailable holdings are excluded.' : ' in your portfolio value.'}`
@@ -35,6 +59,15 @@ function render(data) {
     ? `Last update attempt: ${showTimestamp(data.lastAttemptAt)}`
     : 'No EODHD fetch attempted yet'
   byId('fund-count').textContent = data.funds.length
+  const latestPriceDate = data.funds.filter(fund => fund.status === 'available' && fund.priceDate)
+    .map(fund => fund.priceDate).sort().at(-1)
+  byId('latest-price-date').textContent = latestPriceDate ? showDate(latestPriceDate) : 'Unavailable'
+  const hasAllocation = data.availableCount > 0 && data.totalCents > 0
+  byId('allocation-note').textContent = !hasAllocation
+    ? 'Allocation unavailable without a positive priced total. Not investment performance.'
+    : data.partial
+      ? 'Allocation shows share of the priced subtotal; unavailable holdings are excluded. Not performance.'
+      : 'Allocation is a share of total portfolio value, not investment performance.'
   const cards = data.funds.map(fund => {
     const fragment = byId('fund-template').content.cloneNode(true)
     const card = fragment.querySelector('article')
@@ -47,9 +80,11 @@ function render(data) {
     text('.fund-isin', fund.isin)
     text('.fund-units', units.format(Number(fund.units)))
     text('.fund-price', available ? unitPrice.format(fund.price) : 'Unavailable')
-    text('.fund-date', available ? date.format(new Date(`${fund.priceDate}T00:00:00Z`)) : 'Unavailable')
+    text('.fund-date', available ? showDate(fund.priceDate) : 'Unavailable')
     text('.fund-message', fund.message ?? '')
     text('.fund-value', available ? money.format(fund.valueCents / 100) : 'Not included')
+    text('.fund-share-label', data.partial ? 'Priced subtotal share' : 'Portfolio share')
+    text('.fund-share', available && hasAllocation ? percentage.format(fund.valueCents / data.totalCents) : 'Unavailable')
     text('.fund-symbol', fund.resolved ? `Verified EUR fund: ${fund.symbol ?? fund.isin}` : 'Exact ISIN / EUR match not yet verified')
     text('.fund-provider', `Source: ${fund.sourceName ?? 'EODHD'}`)
     const sourceLink = card.querySelector('.fund-source-link')
@@ -81,11 +116,8 @@ function renderTransactions(data) {
   const available = data.status === 'available'
   byId('transactions-content').hidden = !available
   byId('transactions-status').textContent = available
-    ? `${data.count} transactions from ${data.firstDate} to ${data.lastDate}. Source: fund_transactions_2019-2025.csv.`
+    ? `${data.count} transactions · ${showDate(data.firstDate)} – ${showDate(data.lastDate)}. Source: fund_transactions_2019-2025.csv.`
     : data.message
-  byId('transactions-scope').textContent = available
-    ? `CSV covers ${data.byFund.length} funds only. Holdings without transaction records are not included in invested totals.`
-    : ''
   byId('transactions-status').classList.toggle('error-banner', !available)
   byId('transaction-rows').replaceChildren()
   byId('investment-fund-rows').replaceChildren()
@@ -100,7 +132,7 @@ function renderTransactions(data) {
     ])))
     byId('transaction-rows').replaceChildren(...[...data.transactions].reverse().map(transaction => {
       const row = tableRow([
-        transaction.date, transaction.fund, transaction.operation === 'buy' ? 'Buy' : 'Sell',
+        showDate(transaction.date), transaction.fund, transaction.operation === 'buy' ? 'Buy' : 'Sell',
         money.format(transaction.amountCents / 100),
       ])
       const isin = document.createElement('span')
