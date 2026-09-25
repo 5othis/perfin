@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#f6f5f2">
+  <meta name="theme-color" content="#f5f2eb">
   <title>Portfolio</title>
   <link rel="stylesheet" href="/styles.css">
   <script type="module" src="/app.js"></script>
@@ -11,7 +11,7 @@
 <body>
   <main>
     <header class="page-heading">
-      <h1>Portfolio</h1>
+      <div><p class="eyebrow">Your financial overview</p><h1>Portfolio</h1></div>
       <div class="header-actions">
         <p class="fetch-info"><span>Last price fetch</span><span id="last-fetched">Not yet fetched</span></p>
         <button id="refresh" type="button" disabled><span id="refresh-label">Loading...</span></button>
@@ -36,15 +36,21 @@
     <section class="panel chart-panel" aria-labelledby="chart-title">
       <div class="section-heading">
         <p class="eyebrow">Over time</p>
-        <h2 id="chart-title">Net invested cash (CSV)</h2>
+        <h2 id="chart-title">Historical value of current holdings</h2>
       </div>
-      <p class="muted chart-description" id="chart-description">Cumulative recorded purchases minus sales in EUR. Invested cash, not portfolio value or investment return.</p>
+      <p class="muted chart-description" id="chart-description">Current units x historical EOD prices, not actual past balance or investment return.</p>
+      <details class="chart-methodology">
+        <summary>How this chart is calculated</summary>
+        <p id="chart-methodology">Current units are held constant and multiplied by historical end-of-day prices / NAVs. Combined values use only shared price dates for the same included funds throughout. Missing prices are not estimated, zero-filled or carried forward. Lines connect available observations, not inferred daily prices. The final date can differ from the headline. No purchase dates, past units, cash flows or reinvestments are inferred; raw prices are not dividend/split-adjusted.</p>
+      </details>
+      <div class="chart-layout">
+      <div class="chart-main">
       <div class="chart-toolbar">
         <div class="control-group">
           <span class="control-label" id="metric-label">Measure</span>
           <div class="chart-metrics" role="group" aria-labelledby="metric-label">
-            <button type="button" data-metric="invested" aria-pressed="true">Net invested cash</button>
-            <button type="button" data-metric="portfolio" aria-pressed="false">Current holdings value</button>
+            <button type="button" data-metric="portfolio" aria-pressed="true">Current holdings value</button>
+            <button type="button" data-metric="invested" aria-pressed="false">Net invested cash</button>
           </div>
         </div>
         <div class="control-group">
@@ -57,16 +63,7 @@
           </div>
         </div>
       </div>
-      <fieldset class="fund-picker">
-        <legend>Include funds</legend>
-        <div class="fund-filter-row">
-          <label class="fund-option fund-option-all"><input id="chart-all-funds" type="checkbox" checked> <span>All funds</span></label>
-          <div id="chart-funds" class="fund-options"></div>
-        </div>
-      </fieldset>
       <p id="chart-coverage" class="coverage-note" role="status"></p>
-      <div class="chart-layout">
-      <div class="chart-main">
       <p id="chart-empty" class="empty-state" role="status">Loading history...</p>
       <div id="chart-content" hidden>
         <svg id="history-chart" viewBox="0 0 960 380" role="group" tabindex="0" aria-roledescription="interactive chart" aria-labelledby="chart-title" aria-describedby="chart-description chart-coverage chart-summary chart-help"></svg>
@@ -85,6 +82,16 @@
         </details>
       </div>
       </div>
+      <details id="chart-fund-selector" class="chart-fund-selector" open>
+        <summary id="chart-fund-summary">Funds <span id="chart-selection-count"></span></summary>
+        <fieldset class="fund-picker">
+          <legend class="sr-only">Include funds</legend>
+          <div class="fund-filter-row">
+            <label class="fund-option fund-option-all"><input id="chart-all-funds" type="checkbox" checked> <span>All funds</span></label>
+            <div id="chart-funds" class="fund-options"></div>
+          </div>
+        </fieldset>
+      </details>
       </div>
     </section>
 
@@ -107,8 +114,8 @@
           <div><dt>Total sales</dt><dd id="sales-total"></dd></div>
           <div class="net-invested"><dt>Net invested (CSV)</dt><dd id="invested-total"></dd></div>
         </dl>
-        <p class="muted">Recorded cash amounts only, not portfolio value or profit. No units or execution prices are inferred, and current holdings are unchanged.</p>
-        <p class="comparison-warning">Portfolio value minus CSV net invested is not profit. CSV coverage may be incomplete, and these figures do not establish investment return.</p>
+        <p class="comparison-warning">Portfolio value minus CSV net invested is not profit.</p>
+        <details class="csv-methodology"><summary>About these cash records</summary><p>Recorded cash amounts only, not portfolio value or profit. No units or execution prices are inferred, and current holdings are unchanged. CSV coverage may be incomplete, and these figures do not establish investment return.</p></details>
         <div class="table-scroll" role="region" aria-label="Invested amounts by fund" tabindex="0">
           <table class="investment-table">
             <caption class="sr-only">Invested amounts by fund</caption>
@@ -145,7 +152,7 @@
   </main>
 
   <template id="fund-template">
-    <article class="fund-card panel">
+    <article class="fund-card">
       <div class="fund-identity">
         <h3 class="fund-name"></h3>
         <p class="fund-isin muted"></p>
@@ -153,7 +160,7 @@
       </div>
       <dl class="fund-facts">
         <div class="value-row"><dt>Value</dt><dd class="fund-value"></dd></div>
-        <div><dt class="fund-share-label">Portfolio share</dt><dd class="fund-share"></dd></div>
+        <div><dt class="fund-share-label">Portfolio share</dt><dd><span class="fund-share"></span><meter class="fund-allocation" min="0" max="1" hidden></meter></dd></div>
         <div><dt>Units</dt><dd class="fund-units"></dd></div>
         <div><dt>Price / unit</dt><dd class="fund-price"></dd></div>
         <div><dt>Price date</dt><dd class="fund-date"></dd></div>

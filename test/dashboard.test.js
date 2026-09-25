@@ -13,7 +13,18 @@ class Element {
   }
   append(...children) { this.children.push(...children) }
   replaceChildren(...children) { this.children = children }
-  setAttribute(name, value) { this.attributes.set(name, value) }
+  setAttribute(name, value) {
+    this.attributes.set(name, value)
+    if (name === 'viewBox') {
+      const [, , width, height] = value.split(' ').map(Number)
+      this.viewBox = { baseVal: { width, height } }
+    }
+  }
+  removeAttribute(name) { this.attributes.delete(name) }
+  getComputedTextLength() { return this.attributes.get('textLength') ?? this.textContent.length * 7 }
+  contains(element) { return this === element || this.children.some(child => child.contains(element)) }
+  focus() { document.activeElement = this }
+  matches(selector) { return selector === 'input[type="checkbox"]' && this.tag === 'input' }
   addEventListener(name, listener) { this.listeners.set(name, listener) }
   querySelector(selector) {
     if (!this.selectors.has(selector)) this.selectors.set(selector, new Element())
@@ -30,8 +41,8 @@ class Element {
 const settle = () => new Promise(resolve => setImmediate(resolve))
 let instance = 0
 
-async function dashboard(t) {
-  const original = new Map(['document', 'fetch', 'ResizeObserver'].map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]))
+async function dashboard(t, { desktop = true } = {}) {
+  const original = new Map(['document', 'fetch', 'ResizeObserver', 'matchMedia'].map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]))
   t.after(() => {
     for (const [key, descriptor] of original) {
       if (descriptor) Object.defineProperty(globalThis, key, descriptor)
@@ -44,10 +55,23 @@ async function dashboard(t) {
     return elements.get(id)
   }
   get('fund-template').content = { cloneNode: () => new Element() }
+  get('chart-fund-selector').append(get('chart-fund-summary'), get('chart-all-funds'), get('chart-funds'))
+  get('chart-fund-selector').open = true
+  get('history-chart').clientWidth = 266
+  get('history-chart').clientHeight = 340
+  const metricButtons = ['portfolio', 'invested'].map(metric => Object.assign(new Element('button'), { dataset: { metric } }))
+  const periodButtons = ['1M', '3M', '1Y', 'ALL'].map(period => Object.assign(new Element('button'), { dataset: { period } }))
   globalThis.document = {
     getElementById: get,
-    querySelectorAll: () => [],
+    querySelectorAll: selector => selector === '[data-metric]' ? metricButtons : periodButtons,
     createElement: tag => new Element(tag),
+    createElementNS: (_, tag) => new Element(tag),
+  }
+  const media = new Element()
+  media.matches = desktop
+  globalThis.matchMedia = query => {
+    assert.equal(query, '(min-width: 981px)')
+    return media
   }
   globalThis.ResizeObserver = class { observe() {} }
   const requests = []
@@ -61,7 +85,7 @@ async function dashboard(t) {
     await settle()
   }
   const card = index => get('funds').children[index].querySelector('article')
-  return { get, respond, card, requests }
+  return { get, respond, card, requests, media, metricButtons, periodButtons }
 }
 
 function holdings({ partial = false, zero = false, unavailable = false } = {}) {
@@ -107,7 +131,10 @@ test('CSV coverage waits for holdings and updates dynamically when the CSV arriv
   assert.equal(card(0).querySelector('.fund-share-label').textContent, 'Portfolio share')
   assert.equal(card(0).querySelector('.status-badge').textContent, 'Cached EOD price')
   assert.equal(get('transaction-rows').children[0].children[0].textContent, '02.01.2025')
-  assert.equal(get('chart-title').textContent, 'Net invested cash (CSV)')
+  assert.equal(get('chart-title').textContent, 'Historical value of current holdings')
+  assert.equal(card(0).querySelector('.fund-allocation').value, .1)
+  assert.equal(card(0).querySelector('.fund-allocation').hidden, false)
+  assert.equal(card(0).querySelector('.fund-allocation').attributes.get('aria-valuetext'), '10 %')
 
   get('refresh').listeners.get('click')()
   await respond('/api/transactions', ledger(2))
@@ -123,6 +150,9 @@ test('partial allocation uses the priced subtotal and CSV coverage works with ho
   assert.equal(card(0).querySelector('.fund-share').textContent, '100 %')
   assert.equal(card(0).querySelector('.fund-share-label').textContent, 'Priced subtotal share')
   assert.equal(card(1).querySelector('.fund-share').textContent, 'Unavailable')
+  assert.equal(card(0).querySelector('.fund-allocation').value, 1)
+  assert.match(card(0).querySelector('.fund-allocation').attributes.get('aria-label'), /priced subtotal share/)
+  assert.equal(card(1).querySelector('.fund-allocation').hidden, true)
   assert.equal(get('latest-price-date').textContent, '21.09.2026')
   assert.match(get('allocation-note').textContent, /priced subtotal/)
   await respond('/api/transactions', ledger())
@@ -134,6 +164,7 @@ test('zero and unavailable totals never produce bogus allocation percentages', a
   await respond('/api/portfolio', holdings({ zero: true }))
   await respond('/api/transactions', { status: 'missing', message: 'CSV not found.' })
   for (let index = 0; index < 4; index++) assert.equal(card(index).querySelector('.fund-share').textContent, 'Unavailable')
+  for (let index = 0; index < 4; index++) assert.equal(card(index).querySelector('.fund-allocation').hidden, true)
   assert.equal(get('total').textContent, '0,00 €')
   assert.match(get('transactions-scope').textContent, /CSV coverage unavailable/)
   get('refresh').listeners.get('click')()
@@ -143,6 +174,111 @@ test('zero and unavailable totals never produce bogus allocation percentages', a
   assert.equal(get('latest-price-date').textContent, 'Unavailable')
   assert.match(get('coverage').textContent, /not a zero-value portfolio/)
   assert.equal(card(0).querySelector('.fund-share').textContent, 'Unavailable')
+  assert.equal(card(0).querySelector('.fund-allocation').hidden, true)
+})
+
+test('valuation defaults to every observation, retains controls on refresh, and never substitutes CSV history', async t => {
+  const { get, respond, metricButtons, periodButtons } = await dashboard(t)
+  const data = holdings()
+  data.history.points = [{ date: '2020-01-02', valueCents: 1000 }, { date: '2026-09-24', valueCents: 10000 }]
+  const csv = ledger()
+  csv.points = [{ date: '2025-01-02', valueCents: 300 }]
+  await respond('/api/transactions', csv)
+  assert.equal(get('chart-content').hidden, true)
+  assert.match(get('chart-empty').textContent, /history unavailable/)
+  await respond('/api/portfolio', data)
+  assert.match(get('chart-summary').textContent, /02.01.2020.*24.09.2026.*2 observations/)
+  assert.equal(get('history-chart').querySelectorAll('circle').length, 3)
+  periodButtons[0].listeners.get('click')()
+  assert.match(get('chart-summary').textContent, /1 observations/)
+  metricButtons[1].listeners.get('click')()
+  assert.equal(get('chart-title').textContent, 'Net invested cash (CSV)')
+  get('refresh').listeners.get('click')()
+  await respond('/api/transactions', csv)
+  await respond('/api/portfolio?refresh=1', data)
+  assert.equal(get('chart-title').textContent, 'Net invested cash (CSV)')
+  assert.equal(periodButtons[0].attributes.get('aria-pressed'), 'true')
+})
+
+test('mobile fund disclosure stays collapsed across renders and preserves expanded preference on resize', async t => {
+  const { get, respond, media } = await dashboard(t, { desktop: false })
+  const selector = get('chart-fund-selector')
+  assert.equal(selector.open, false)
+  await respond('/api/portfolio', holdings())
+  await respond('/api/transactions', ledger())
+  assert.equal(selector.open, false)
+  assert.equal(get('chart-selection-count').textContent, '4 / 4')
+  media.matches = true
+  media.listeners.get('change')()
+  assert.equal(selector.open, true)
+  let prevented = false
+  get('chart-fund-summary').listeners.get('click')({ preventDefault: () => { prevented = true } })
+  assert.equal(prevented, true)
+  media.matches = false
+  media.listeners.get('change')()
+  assert.equal(selector.open, false)
+  selector.open = true
+  selector.listeners.get('toggle')()
+  media.matches = true
+  media.listeners.get('change')()
+  media.matches = false
+  media.listeners.get('change')()
+  assert.equal(selector.open, true)
+})
+
+test('desktop selection remains visible and resizing never hides a focused checkbox', async t => {
+  const { get, respond, media } = await dashboard(t)
+  assert.equal(get('chart-fund-selector').open, true)
+  await respond('/api/portfolio', holdings())
+  await respond('/api/transactions', ledger())
+  get('chart-all-funds').focus()
+  media.matches = false
+  media.listeners.get('change')()
+  assert.equal(get('chart-fund-selector').open, true)
+  const boxes = get('chart-funds').querySelectorAll('input')
+  boxes[0].checked = false
+  get('chart-funds').listeners.get('change')({ target: boxes[0] })
+  assert.equal(get('chart-all-funds').indeterminate, true)
+  assert.equal(get('chart-selection-count').textContent, '3 / 4')
+  get('refresh').listeners.get('click')()
+  await respond('/api/portfolio?refresh=1', holdings())
+  await respond('/api/transactions', ledger())
+  assert.equal(get('chart-funds').querySelectorAll('input')[0].checked, false)
+  assert.equal(get('chart-all-funds').indeterminate, true)
+  assert.equal(get('chart-fund-selector').open, true)
+})
+
+test('narrow charts use short date ticks and bound tooltips without changing exact inspection values', async t => {
+  const { get, respond } = await dashboard(t)
+  const data = holdings()
+  data.history.points = [
+    { date: '2020-01-02', valueCents: 100_000_000 },
+    { date: '2026-09-24', valueCents: 200_000_000 },
+  ]
+  await respond('/api/portfolio', data)
+  await respond('/api/transactions', ledger())
+  const svg = get('history-chart')
+  const dates = svg.children.filter(child => child.tag === 'text' && child.attributes.get('y') === 328)
+  assert.deepEqual(dates.map(child => child.textContent), ['02.01.', '24.09.'])
+  svg.listeners.get('focus')()
+  assert.equal(get('chart-announcement').textContent, '24.09.2026 · 2.000.000,00 €')
+  const tooltip = svg.children.find(child => child.attributes.get('class') === 'chart-tooltip')
+  const box = tooltip.children[0]
+  const [x, y] = tooltip.attributes.get('transform').match(/[-\d.]+/g).map(Number)
+  assert.ok(x >= 0 && x + box.attributes.get('width') <= 266)
+  assert.ok(y >= 0 && y + box.attributes.get('height') <= 340)
+})
+
+test('a zero-value holding has an honest zero meter when the priced total is positive', async t => {
+  const { respond, card } = await dashboard(t)
+  const data = holdings()
+  data.totalCents -= data.funds[0].valueCents
+  data.funds[0].valueCents = 0
+  await respond('/api/portfolio', data)
+  await respond('/api/transactions', ledger())
+  assert.equal(card(0).querySelector('.fund-allocation').value, 0)
+  assert.equal(card(0).querySelector('.fund-allocation').hidden, false)
+  assert.equal(card(0).querySelector('.fund-allocation').attributes.get('aria-valuetext'), '0 %')
 })
 
 test('a failed refresh retains the snapshot and explicitly warns that it may be outdated', async t => {

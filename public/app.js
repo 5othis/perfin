@@ -85,6 +85,13 @@ function render(data) {
     text('.fund-value', available ? money.format(fund.valueCents / 100) : 'Not included')
     text('.fund-share-label', data.partial ? 'Priced subtotal share' : 'Portfolio share')
     text('.fund-share', available && hasAllocation ? percentage.format(fund.valueCents / data.totalCents) : 'Unavailable')
+    const allocation = card.querySelector('.fund-allocation')
+    allocation.hidden = !available || !hasAllocation
+    if (!allocation.hidden) {
+      allocation.value = fund.valueCents / data.totalCents
+      allocation.setAttribute('aria-label', `${fund.name}: ${data.partial ? 'priced subtotal share' : 'portfolio share'}`)
+      allocation.setAttribute('aria-valuetext', percentage.format(allocation.value))
+    }
     text('.fund-symbol', fund.resolved ? `Verified EUR fund: ${fund.symbol ?? fund.isin}` : 'Exact ISIN / EUR match not yet verified')
     text('.fund-provider', `Source: ${fund.sourceName ?? 'EODHD'}`)
     const sourceLink = card.querySelector('.fund-source-link')

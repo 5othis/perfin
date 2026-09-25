@@ -3,6 +3,7 @@ const money = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR
 const euro = cents => money.format(cents / 100)
 const dateFormat = new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' })
 const displayDate = date => dateFormat.format(new Date(dayTime(date)))
+const shortDateFormat = new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: '2-digit', timeZone: 'UTC' })
 const axisNumber = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 })
 const axisEuro = cents => Math.abs(cents) >= 10_000_000 ? `${axisNumber.format(cents / 100_000)} Tsd. €` : euro(cents)
 const valuationTitle = 'Historical value of current holdings'
@@ -35,7 +36,7 @@ export function selectedChartData(history, funds, transactions, selection, metri
   const selected = new Set(all ? [...funds, ...(transactions?.byFund ?? [])].map(fund => fund.isin) : selection)
   if (!all && !selected.size) return {
     points: [], title: metric === 'portfolio' ? valuationTitle : investedTitle, coverage: 'No funds selected.',
-    empty: 'Select at least one fund using the checkboxes above.',
+    empty: 'Select at least one fund using the Funds checkboxes.',
   }
   const single = !all && selected.size === 1
   const isin = single ? [...selected][0] : null
@@ -95,7 +96,7 @@ export function createHistoryChart() {
   let transactions = null
   let funds = []
   let period = 'ALL'
-  let metric = 'invested'
+  let metric = 'portfolio'
   let selectedIndex = 0
   let visible = []
   let positions = []
@@ -109,7 +110,33 @@ export function createHistoryChart() {
   const details = byId('history-details')
   const picker = byId('chart-funds')
   const allFunds = byId('chart-all-funds')
+  const selector = byId('chart-fund-selector')
+  const selectorSummary = byId('chart-fund-summary')
+  const desktop = matchMedia('(min-width: 981px)')
+  let mobileExpanded = false
   let selectedIsins = null
+
+  function syncSelector(initial = false) {
+    if (desktop.matches) {
+      if (!initial) mobileExpanded = selector.open
+      selector.open = true
+      selectorSummary.setAttribute('tabindex', '-1')
+      if (document.activeElement === selectorSummary) allFunds.focus()
+    } else {
+      const focusInside = selector.contains(document.activeElement) && document.activeElement !== selectorSummary
+      selector.open = mobileExpanded || focusInside
+      selectorSummary.setAttribute('tabindex', '0')
+    }
+  }
+  syncSelector(true)
+  desktop.addEventListener('change', () => syncSelector())
+  selectorSummary.addEventListener('click', event => {
+    if (desktop.matches) event.preventDefault()
+  })
+  selector.addEventListener('toggle', () => {
+    if (desktop.matches) selector.open = true
+    else mobileExpanded = selector.open
+  })
 
   function syncCheckboxes() {
     const boxes = [...picker.querySelectorAll('input')]
@@ -117,6 +144,7 @@ export function createHistoryChart() {
     const checked = boxes.filter(box => box.checked).length
     allFunds.checked = selectedIsins === null || (boxes.length > 0 && checked === boxes.length)
     allFunds.indeterminate = checked > 0 && checked < boxes.length
+    byId('chart-selection-count').textContent = boxes.length ? `${checked} / ${boxes.length}` : ''
   }
 
   function hideTooltip() {
@@ -137,7 +165,16 @@ export function createHistoryChart() {
     tooltipDate.textContent = displayDate(point.date)
     tooltipValue.textContent = euro(point.valueCents)
     for (const element of [cursor, dot, tooltip]) element.setAttribute('visibility', 'visible')
-    const width = Math.max(tooltipDate.getComputedTextLength(), tooltipValue.getComputedTextLength()) + 24
+    const availableWidth = svg.viewBox.baseVal.width - 28
+    for (const label of [tooltipDate, tooltipValue]) {
+      label.removeAttribute('textLength')
+      label.removeAttribute('lengthAdjust')
+      if (label.getComputedTextLength() > availableWidth) {
+        label.setAttribute('textLength', availableWidth)
+        label.setAttribute('lengthAdjust', 'spacingAndGlyphs')
+      }
+    }
+    const width = Math.min(availableWidth, Math.max(tooltipDate.getComputedTextLength(), tooltipValue.getComputedTextLength())) + 24
     tooltipBox.setAttribute('width', width)
     const anchor = pointer ?? { x, y }
     const maxX = svg.viewBox.baseVal.width - width - 2
@@ -171,8 +208,11 @@ export function createHistoryChart() {
     byId('chart-announcement').textContent = ''
     byId('chart-title').textContent = selection.title
     byId('chart-description').textContent = invested
-      ? 'Cumulative recorded purchases minus sales in EUR. This is invested cash, not portfolio value or investment returns. The line changes only on transaction dates.'
-      : 'Current units × historical end-of-day price / NAV. Not your actual historical portfolio balance or investment return. Combined values use shared price dates only; missing prices are not estimated.'
+      ? 'Recorded purchases minus sales in EUR, not portfolio value or investment return.'
+      : 'Current units x historical EOD prices, not actual past balance or investment return.'
+    byId('chart-methodology').textContent = invested
+      ? 'Cumulative recorded cash amounts only. The step line changes only on transaction dates and ends at the last recorded transaction. Nothing outside the CSV is assumed. Missing records mean unknown investments, not zero. No purchased units, execution prices or cost basis are inferred, and current holdings are unchanged.'
+      : 'Current units are held constant and multiplied by historical end-of-day prices / NAVs. Combined values use only shared price dates for the same included funds throughout. Missing prices are not estimated, zero-filled or carried forward. Lines connect available observations, not inferred daily prices. The final date can differ from the headline. No purchase dates, past units, cash flows or reinvestments are inferred; raw prices are not dividend/split-adjusted.'
     byId('chart-coverage').textContent = selection.coverage
     byId('history-caption').textContent = `${selection.title} - selected period`
     byId('chart-content').hidden = !visible.length
@@ -191,8 +231,9 @@ export function createHistoryChart() {
     const padding = Math.max((max - min) * .12, max * .005, 100)
     min = invested ? Math.min(0, min - padding) : Math.max(0, min - padding)
     max += padding
-    const left = 106
     const width = Math.max(240, svg.clientWidth)
+    const narrow = width < 420
+    const left = narrow ? 84 : 126
     const height = svg.clientHeight || 380
     svg.setAttribute('viewBox', `0 0 ${width} ${height}`)
     const right = width - 12
@@ -209,7 +250,10 @@ export function createHistoryChart() {
       const value = max - (max - min) * index / 4
       svg.append(
         svgElement('line', { x1: left, x2: right, y1: y, y2: y, class: 'chart-grid' }),
-        svgElement('text', { x: left - 12, y: y + 4, 'text-anchor': 'end', class: 'chart-axis' }, axisEuro(value)),
+        svgElement('text', { x: left - 10, y: y + 5, 'text-anchor': 'end', class: 'chart-axis' },
+          Math.abs(value) >= 100_000_000 ? `${axisNumber.format(value / 100_000_000)} Mio. €`
+            : narrow ? Math.abs(value) >= 100_000 ? `${axisNumber.format(value / 100_000)} Tsd. €`
+              : `${Math.round(value / 100).toLocaleString('de-DE')} €` : axisEuro(value)),
       )
     }
     const dateTicks = duration ? width > 650 ? [0, .5, 1] : [0, 1] : [.5]
@@ -219,12 +263,15 @@ export function createHistoryChart() {
         x: left + (right - left) * fraction, y: height - 12,
         'text-anchor': fraction === 0 ? 'start' : fraction === 1 ? 'end' : 'middle',
         class: 'chart-axis',
-      }, displayDate(tickDate)))
+      }, narrow ? shortDateFormat.format(new Date(dayTime(tickDate))) : displayDate(tickDate)))
     }
     svg.append(svgElement('path', {
         d: positions.map(({ x, y }, index) => !index ? `M${x},${y}` : invested ? `H${x}V${y}` : `L${x},${y}`).join(' '),
         class: 'chart-line',
       }))
+    if ((!invested && visible.length <= 24) || visible.length === 1) {
+      for (const { x, y } of positions) svg.append(svgElement('circle', { cx: x, cy: y, r: 3, class: 'chart-dot' }))
+    }
     cursor = svgElement('line', { y1: top, y2: bottom, class: 'chart-cursor' })
     dot = svgElement('circle', { r: 4, class: 'chart-dot' })
     tooltip = svgElement('g', { class: 'chart-tooltip', 'aria-hidden': 'true' })

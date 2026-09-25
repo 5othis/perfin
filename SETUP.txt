@@ -140,7 +140,8 @@ shows a dash rather than presenting the empty sum as the portfolio's value.
 Allocation is each available holding's value divided by a positive displayed total.
 Partial coverage is explicitly labeled as a share of the priced subtotal, not the
 whole portfolio. Unavailable holdings and zero totals have no allocation percentage.
-Allocation is not investment performance.
+Allocation is not investment performance. Proportional bars use the same 0-100%
+scale for every holding; unavailable allocations have no bar.
 
 EODHD documentation:
 https://eodhd.com/financial-apis/search-api-for-stocks-etfs-mutual-funds
@@ -157,8 +158,9 @@ The existing EOD requests also supply the history: no extra API calls are made.
 History is cached with each fund's current price. Only currently available funds
 are included, and that same group is used throughout the series.
 The valuation mode is titled "Historical value of current holdings" for every
-selection. Partial coverage and selected funds are disclosed separately below the
-filter chips, without changing the meaning of the title.
+selection. It is the default measure, with All selected to show every available
+observation. Partial coverage and selected funds are disclosed separately above
+the plot, without changing the meaning of the title. Longer methodology is expandable.
 Only exact shared price dates with valid positive prices are calculated.
 Missing or unrepresentable historical prices are omitted, never zero-filled or
 carried forward. Lines connect the available observations; inspect their exact
@@ -186,8 +188,8 @@ can be legitimate separate transactions.
 The Investment history section shows all CSV records, newest first, and cash
 totals per fund. Net invested is purchases minus sales (not profit or cost basis).
 The "Net invested cash (CSV)" chart groups records by date, sums exact integer
-cents, and draws a cumulative step line. It remains the default chart mode, with
-the All range selected so the full file is visible.
+cents, and draws a cumulative step line. Select Net invested cash above the plot
+to view it; the default is current-holdings historical value, not CSV cash flows.
 The date range ends at the last recorded transaction. Nothing later is inferred.
 
 The CSV does not contain purchased units or execution prices, so no historical
@@ -216,6 +218,11 @@ from that ISIN's CSV records; missing records show an empty state, not zero.
 Unavailable selected prices produce a partial chart. Missing CSV records are
 explicitly identified as unknown investments, not zero.
 Selected funds, chart mode, and period are retained during Refresh.
-The full-width chart sits above compact holding rows (cards on mobile). Each
-holding shows price availability or cache status; source details remain expandable.
+The warm cream / indigo dashboard uses a wider desktop layout, a light chart
+surface, open ruled holdings and a separate calm investment-history section.
+Measure and range stay together above the plot. The vertical fund checkbox list
+occupies a 250px sidebar on desktop. On smaller screens, expand Funds below the
+plot; it starts collapsed, retains mobile expansion preference across resizing,
+and is always visible on desktop. All funds exposes a native mixed checkbox state.
+Each holding shows price availability or cache status; source details remain expandable.
 Wide tables scroll within their own regions and can be focused from the keyboard.
