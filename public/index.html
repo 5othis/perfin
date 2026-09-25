@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#ffffff">
+  <title>Portfolio</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <main>
+    <header class="page-heading">
+      <h1>Portfolio</h1>
+      <button id="refresh" type="button" disabled><span id="refresh-label">Loading...</span></button>
+    </header>
+
+    <div id="request-error" class="error-banner" role="alert" hidden></div>
+    <p id="update-status" class="sr-only" role="status">Loading portfolio.</p>
+
+    <section class="portfolio-summary" aria-labelledby="total-label" aria-busy="true" id="summary">
+      <div>
+        <p class="muted" id="total-label">Portfolio value</p>
+        <p id="total" class="portfolio-total">Loading...</p>
+        <p class="muted" id="coverage">Fetching prices...</p>
+      </div>
+      <div class="fetch-info"><p class="muted">Last price fetch</p><p id="last-fetched">Not yet fetched</p></div>
+    </section>
+
+    <section class="panel chart-panel" aria-labelledby="chart-title">
+      <div class="section-heading">
+        <h2 id="chart-title">Portfolio value over time</h2>
+        <div class="periods" role="group" aria-label="Chart period">
+          <button type="button" data-period="1M" aria-pressed="false">1M</button>
+          <button type="button" data-period="3M" aria-pressed="false">3M</button>
+          <button type="button" data-period="1Y" aria-pressed="false">1Y</button>
+          <button type="button" data-period="ALL" aria-pressed="true">All</button>
+        </div>
+        <div class="chart-metrics" role="group" aria-label="History type">
+          <button type="button" data-metric="invested" aria-pressed="true">Invested amount</button>
+          <button type="button" data-metric="portfolio" aria-pressed="false">Portfolio value</button>
+        </div>
+      </div>
+      <fieldset class="fund-picker">
+        <legend>Funds to include</legend>
+        <label class="fund-option fund-option-all"><input id="chart-all-funds" type="checkbox" checked> All funds</label>
+        <div id="chart-funds" class="fund-options"></div>
+      </fieldset>
+      <p class="muted chart-description" id="chart-description">Historical EOD prices &times; current units, not actual past holdings or investment returns.
+        Only dates with prices for all included funds are plotted; missing dates are not estimated.</p>
+      <p id="chart-coverage" class="muted"></p>
+      <p id="chart-empty" class="empty-state" role="status">Loading history...</p>
+      <div id="chart-content" hidden>
+        <svg id="history-chart" viewBox="0 0 960 290" role="group" tabindex="0" aria-roledescription="interactive chart" aria-labelledby="chart-title" aria-describedby="chart-description chart-summary chart-help"></svg>
+        <p id="chart-help" class="sr-only">Move the pointer or touch the chart to inspect a value. Use Left and Right arrow keys, Home, or End when the chart is focused. Escape hides the tooltip.</p>
+        <p id="chart-announcement" class="sr-only" role="status"></p>
+        <p id="chart-summary" class="muted"></p>
+        <details id="history-details">
+          <summary>View chart data</summary>
+          <div class="history-table-wrap">
+            <table>
+              <caption class="sr-only" id="history-caption">Selected historical values</caption>
+              <thead><tr><th scope="col">Date</th><th scope="col">Value (EUR)</th></tr></thead>
+              <tbody id="history-rows"></tbody>
+            </table>
+          </div>
+        </details>
+      </div>
+    </section>
+
+    <section aria-labelledby="holdings-title">
+      <h2 id="holdings-title" class="holdings-heading">Holdings <span class="muted" id="fund-count"></span></h2>
+      <div id="funds" class="fund-grid" aria-busy="true"><p class="muted">Loading holdings...</p></div>
+    </section>
+
+    <section class="panel transactions-panel" aria-labelledby="transactions-title">
+      <h2 id="transactions-title">Investment history</h2>
+      <p id="transactions-status" class="muted" role="status">Loading transaction CSV...</p>
+      <div id="transactions-content" hidden>
+        <dl class="transaction-totals">
+          <div><dt>Total purchases</dt><dd id="purchases-total"></dd></div>
+          <div><dt>Total sales</dt><dd id="sales-total"></dd></div>
+          <div><dt>Net invested</dt><dd id="invested-total"></dd></div>
+        </dl>
+        <p class="muted">Recorded cash amounts only, not portfolio value or profit. No units or execution prices are inferred, and current holdings are unchanged.</p>
+        <p class="muted" id="transactions-scope"></p>
+        <div class="table-scroll">
+          <table>
+            <caption class="sr-only">Invested amounts by fund</caption>
+            <thead><tr><th scope="col">Fund</th><th scope="col">Purchases</th><th scope="col">Sales</th><th scope="col">Net invested</th></tr></thead>
+            <tbody id="investment-fund-rows"></tbody>
+          </table>
+        </div>
+        <details id="transactions-details" open>
+          <summary>All transactions <span id="transactions-count"></span></summary>
+          <div class="history-table-wrap table-scroll">
+            <table>
+              <caption class="sr-only">All imported transactions, newest first</caption>
+              <thead><tr><th scope="col">Date</th><th scope="col">Fund / ISIN</th><th scope="col">Operation</th><th scope="col">Amount (EUR)</th></tr></thead>
+              <tbody id="transaction-rows"></tbody>
+            </table>
+          </div>
+        </details>
+      </div>
+    </section>
+
+    <footer>
+      <p>EODHD and Erste Asset Management website end-of-day prices / NAVs, not live quotes. Prices can lag by a business day or more.</p>
+      <p id="last-attempt">No fetch attempted yet</p>
+      <details><summary>Calculation &amp; cache details</summary>
+        <p>Units &times; price, rounded to cents per fund, then summed. Unavailable funds are excluded from partial totals.
+          History holds current units constant and uses the same included funds throughout.
+          Its last date can differ from the headline, which uses each fund's latest price.</p>
+        <p>Prices and history are cached for 1 hour; symbols for 7 days.
+          Refresh retries prices after 60 seconds. Unresolved mappings are cached for 6 hours.
+          Rate limits may extend the wait.</p>
+      </details>
+    </footer>
+    <noscript><p class="error-banner">Enable JavaScript to load your portfolio.</p></noscript>
+  </main>
+
+  <template id="fund-template">
+    <article class="fund-card panel">
+      <h3 class="fund-name"></h3>
+      <p class="fund-isin muted"></p>
+      <dl class="fund-facts">
+        <div><dt>Units</dt><dd class="fund-units"></dd></div>
+        <div><dt>Price / unit</dt><dd class="fund-price"></dd></div>
+        <div><dt>Price date</dt><dd class="fund-date"></dd></div>
+        <div class="value-row"><dt>Value</dt><dd class="fund-value"></dd></div>
+      </dl>
+      <p class="fund-message"></p>
+      <details class="fund-source"><summary>Source details</summary><p class="fund-provider"></p><p class="status-badge"></p><p class="fund-symbol"></p><p class="fund-fetched"></p><a class="fund-source-link" target="_blank" rel="noopener noreferrer" hidden>Official historical prices</a></details>
+    </article>
+  </template>
+</body>
+</html>

@@ -1,0 +1,205 @@
+FUNDFOLIO - LOCAL MUTUAL FUND PORTFOLIO
+
+Requires Node.js 22.9 or newer (Node.js 24 LTS recommended), including npm.
+No runtime dependencies, accounts, database, trading, or external browser assets.
+The server binds only to 127.0.0.1. This is a local-only application.
+
+INSTALL AND RUN (PowerShell, from this project directory)
+
+  npm install
+  Copy-Item .env.example .env
+  notepad .env
+
+In the editor, set EODHD_API_KEY to your own key, save, and close the file.
+Do not include the key in browser URLs, public files, screenshots, or commits.
+Do not repeat Copy-Item over an existing .env containing your key.
+An existing shell environment variable takes precedence over .env.
+
+  npm start
+
+Open http://127.0.0.1:3000
+Stop with Ctrl+C. Restart after changing .env or holdings.js.
+For automatic restarts during development: npm run dev
+To change the port, edit PORT in .env.
+Without a key, EODHD funds report Price unavailable. The website-backed Erste
+fund can still fetch prices without an API key.
+
+If your network requires the HTTPS_PROXY / HTTP_PROXY environment variables,
+use Node.js 24.5+ and start with proxy support enabled:
+
+  node --use-env-proxy --env-file=.env server.js
+
+Use the port shown in the startup message (PORT in .env overrides 3000).
+
+EDIT QUANTITIES
+
+Edit holdings.js only. Units are decimal strings using a dot, for example
+'1.882', '2.993', and '13.874'. These are not thousands-separated amounts.
+Names, ISINs, and units are returned from this same configuration to the browser.
+
+VERIFICATION
+
+  npm test
+
+Uses Node's built-in test runner. Provider responses in automated tests are
+synthetic fixtures, not actual prices or evidence of EODHD coverage.
+After configuring a real key, open the dashboard or inspect safe server output:
+
+  Invoke-RestMethod http://127.0.0.1:3000/api/portfolio | ConvertTo-Json -Depth 6
+
+Each fund reports resolved, symbol, status, priceDate, fetchedAt, and an explicit
+unavailability reason. A resolved symbol does not imply EOD pricing is covered.
+No actual resolution or valuation date is claimed until EODHD returns that data.
+
+DATA AND COVERAGE
+
+1. The server searches EODHD by ISIN with type=fund and limit=500.
+2. For EODHD funds it only accepts an exact returned ISIN, Currency=EUR, Type=Fund/Mutual Fund,
+   and validated nonempty Code and Exchange fields. It constructs SYMBOL.EXCHANGE
+   from these returned fields, never from a guessed ticker or fund name.
+   Primary listings are tried first. Other verified EUR listings of the SAME
+   ISIN can be tried if a listing has no usable EOD data.
+3. The server requests EOD data with order=d and period=d. It validates dates,
+   selects the newest returned date, and uses the raw close, NOT adjusted_close.
+   Currency is verified through the matching search metadata: EOD price bars do
+   not carry their own ISIN/currency. Missing verification means no valuation.
+4. Search previousClose is not used as a fallback. No alternative share class,
+   foreign-currency price, FX conversion, fabricated price, or demo quote is used.
+5. These are end-of-day prices / mutual fund NAVs, NOT live prices. They may lag by
+   one or more business days; each card shows its own actual price date.
+   Different valuation dates are not silently aligned or estimated.
+6. Missing metadata, absent coverage, subscription restrictions, API failures,
+   timeouts, and rate limits are distinguished from a successful zero holding.
+   EODHD's search covers active instruments only and its demo token cannot search.
+   A failed search is not proof the fund itself does not exist.
+
+The API key is used only for server-to-EODHD HTTPS requests. The browser only
+calls the local /api/portfolio endpoint. Upstream response/error bodies and
+authenticated URLs are never sent to the browser or logged.
+
+ERSTE WEBSITE FUND
+
+SK3110000377 uses provider: 'erste-website' in holdings.js and does not call EODHD.
+The source is the official historical-price page:
+https://www.erste-am.sk/en/eamsk/historicalprices/fond-maximalizovanych-vynosov/SK3110000377
+
+The server reads that page's historical table configuration, then retrieves the
+same unauthenticated GEM_FACTSHEET data used by the website, on data.erste-am.com.
+This is the site's public implementation, not a contracted/stable third-party API.
+It may change; unexpected HTML/data formats fail with an explicit unavailable state.
+The endpoint is allowlisted and no EODHD token is ever sent to Erste.
+
+The exact returned ISIN must match. Each price date and currency is checked.
+Comma-decimal NAV strings are parsed without cent-rounding the unit price.
+The latest dated row must contain a positive EUR NAV; issue price is never used.
+Older SKK-denominated rows are excluded from the EUR history without FX conversion.
+Other share classes are never substituted, including the page's default fund.
+The card links back to the official website and labels this price as a NAV.
+
+Website prices/history share the 1-hour portfolio cache and 60-second minimum
+refresh interval. Rate limits are independent of EODHD so either provider can
+remain working when the other fails. The portfolio chart includes the new fund
+on common EUR valuation dates, using the configured current unit count.
+CSV invested totals remain limited to funds actually present in the CSV: adding
+a holding does not invent purchase transactions or change contribution totals.
+
+CACHE AND REFRESH
+
+Caches are in server memory and reset on restart; no database is used.
+Verified ISIN mappings last 7 days; unverified mappings last 6 hours.
+Prices last 1 hour. Missing price data is cached for 6 hours; transient failures
+for 60 seconds. Simultaneous browser requests share one in-flight update.
+Refresh bypasses the price cache after at least 60 seconds, but retains the
+mapping cache. It does not guarantee a new NAV has been published.
+HTTP 429 Retry-After is respected (minimum 60 seconds).
+Restart the server if you need to discard all caches after correcting access.
+An unavailable price excludes that fund; other successful funds still contribute.
+A failed provider refresh does not silently reuse a previous price.
+If the local server itself cannot be reached, the browser preserves its previous
+snapshot with an explicit warning that it may be outdated.
+
+TIMESTAMPS AND CALCULATIONS
+
+priceDate: the valuation date returned by EODHD (not the time you click Refresh).
+fetchedAt: the time that fund's successful price request completed.
+attemptedAt: when that fund's most recent uncached update was attempted.
+servedAt: when the local API assembled the response; not a fresh provider fetch.
+Cached prices retain their original fetchedAt timestamp.
+The summary shows the most recent successful price fetch among displayed funds.
+Browser timestamps use your local timezone. Valuation dates remain date-only.
+
+Value = units x unadjusted closing price, using decimal integer arithmetic.
+Round each holding half-up to EUR cents, then sum those displayed holding values.
+Price per unit displays up to 12 decimals; calculations use the returned numeric
+price, not its display rounding. Totals exclude unavailable funds and are labeled
+"Partial total" whenever any fund is unavailable. If none are priced, EUR 0.00
+is explicitly identified as an empty partial sum, not the portfolio's value.
+
+EODHD documentation:
+https://eodhd.com/financial-apis/search-api-for-stocks-etfs-mutual-funds
+https://eodhd.com/financial-apis/api-for-historical-data-and-volumes
+
+HISTORICAL PORTFOLIO CHART
+
+The chart reconstructs historical values using CURRENT units for every date.
+It is not your actual past account balance, investment return, or total return:
+it does not know purchase dates, cash flows, unit changes, or reinvestments.
+Raw EOD closes are used, not dividend/split-adjusted prices.
+
+The existing EOD requests also supply the history: no extra API calls are made.
+History is cached with each fund's current price. Only currently available funds
+are included, and that same group is used throughout the series.
+If any fund is unavailable, the chart is explicitly labeled partial.
+Only exact shared price dates with valid positive prices are calculated.
+Missing or unrepresentable historical prices are omitted, never zero-filled or
+carried forward. Lines connect the available observations; inspect their exact
+dates and values using the pointer tooltip, keyboard arrows, or the data table.
+The chart's final value can differ from the headline if funds' latest dates differ.
+
+1M / 3M / 1Y / All choose a period ending at the latest shared observation.
+Daily values use the same per-fund cent rounding and summation as the headline.
+
+TRANSACTION CSV
+
+Place fund_transactions_2019-2025.csv in the project root. The server reads it
+locally on each refresh via /api/transactions, independently of EODHD prices.
+It is excluded from git and never uploaded to EODHD. No database is created.
+The raw file is not served; the local API returns validated transaction records.
+
+Required columns: date,isin,fund,operation,amount_eur
+Dates: YYYY-MM-DD. Operations: buy or sell. Amounts: positive EUR decimals using
+a dot and up to two decimal places. Each ISIN must exist in holdings.js.
+Quoted fields, escaped quotes, UTF-8 BOM, CRLF and LF line endings are supported.
+Invalid files are rejected in full with an explicit error, not partially imported.
+Identical records are retained: without transaction IDs, duplicate-looking rows
+can be legitimate separate transactions.
+
+The Investment history section shows all CSV records, newest first, and cash
+totals per fund. Net invested is purchases minus sales (not profit or cost basis).
+The Invested amount chart groups records by date, sums exact integer cents, and
+draws a cumulative step line. It defaults to All so the full file is visible.
+The date range ends at the last recorded transaction. Nothing later is inferred.
+
+The CSV does not contain purchased units or execution prices, so no historical
+units or past portfolio valuations are inferred from it. Current holdings remain
+configured in holdings.js. The Portfolio value chart remains a separate,
+clearly labeled current-units reconstruction based on available EODHD prices.
+Move the pointer or touch either chart for its date/value bubble. Keyboard users
+can focus the chart and use Left/Right, Home/End and Escape. The data table remains
+available as a non-graphical alternative; there is no bottom slider.
+
+CHART FUND PICKER
+
+Use the visible fund checkboxes to include any combination of funds, for either
+Invested amount or Portfolio value. All funds selects or clears every checkbox.
+The chart updates immediately on every change, without refetching prices.
+Multiple selected funds are summed into one combined line; no selection shows a
+prompt rather than a zero balance. The selection only affects the chart and its data table, not headline
+totals, holding cards, or the full transaction ledger.
+Individual portfolio history uses that fund's own available EUR dates, rather
+than the shared dates used when combining selected funds. Values are current units x price,
+not unit NAVs. Individual invested amounts are cumulative purchases minus sales
+from that ISIN's CSV records; missing records show an empty state, not zero.
+Unavailable selected prices produce a partial chart. Missing CSV records are
+explicitly identified as unknown investments, not zero.
+Selected funds, chart mode, and period are retained during Refresh.
