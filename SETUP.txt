@@ -10,6 +10,7 @@ INSTALL AND RUN (PowerShell, from this project directory)
   Copy-Item .env.example .env
   notepad .env
 
+
 In the editor, set EODHD_API_KEY to your own key, save, and close the file.
 Do not include the key in browser URLs, public files, screenshots, or commits.
 Do not repeat Copy-Item over an existing .env containing your key.

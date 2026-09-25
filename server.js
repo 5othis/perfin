@@ -60,13 +60,16 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     console.error('PORT must be an integer between 1 and 65535.')
     process.exitCode = 1
   } else {
+    // Bind to every interface on Render (or when HOST is set explicitly); stay on
+    // localhost only for local runs, so the dashboard isn't exposed on your network.
+    const host = process.env.HOST ?? (process.env.RENDER ? '0.0.0.0' : '127.0.0.1')
     const server = createApp()
     server.on('error', () => {
       console.error('Could not start the local server. Check whether PORT is already in use.')
       process.exitCode = 1
     })
-    server.listen(port, '127.0.0.1', () => {
-      console.log(`Portfolio dashboard: http://127.0.0.1:${port}`)
+    server.listen(port, host, () => {
+      console.log(`Portfolio dashboard listening on ${host}:${port}`)
       if (!process.env.EODHD_API_KEY?.trim()) console.log('EODHD_API_KEY is not configured; prices will be unavailable.')
     })
   }
